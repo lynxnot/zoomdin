@@ -1,3 +1,3 @@
-[submodule "vendor/wayland"]
-	path = vendor/wayland
+[submodule "pkg/wayland"]
+	path = pkg/wayland
 	url = https://github.com/yasinkaraaslan/odin-wayland.git
