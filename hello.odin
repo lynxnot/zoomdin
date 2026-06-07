@@ -2,7 +2,6 @@ package zoomdin
 
 import "base:runtime"
 import "core:fmt"
-import "core:slice/heap"
 import "core:sys/linux"
 import "core:sys/posix"
 import "core:time"
