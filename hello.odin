@@ -13,22 +13,19 @@ import "vendor/wayland/xdg"
 global_context: runtime.Context
 
 zooWindow: struct {
-	display:     ^wl.display,
-	compositor:  ^wl.compositor,
-	surface:     ^wl.surface,
-	seat:        ^wl.seat,
-	shm:         ^wl.shm,
-	fd:          posix.FD,
-	data:        [^]u32,
-	pool:        ^wl.shm_pool,
-	buffer:      ^wl.buffer,
-	xdg_surface: ^xdg.surface,
-	wm_base:     ^xdg.wm_base,
-	toplevel:    ^xdg.toplevel,
-	curWidth:    int,
-	curHeight:   int,
-	quit:        bool,
-	outputs:     [dynamic]^wl.output,
+	display:    ^wl.display,
+	compositor: ^wl.compositor,
+	surface:    ^wl.surface,
+	seat:       ^wl.seat,
+	shm:        ^wl.shm,
+	wm_base:    ^xdg.wm_base,
+	data:       [^]u32,
+	pool:       ^wl.shm_pool,
+	buffer:     ^wl.buffer,
+	curWidth:   int,
+	curHeight:  int,
+	quit:       bool,
+	outputs:    [dynamic]^wl.output,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -105,15 +102,16 @@ create_shm_pool :: proc() {
 	// creates an anonymous shared memory segment, held by the kernel until something
 	// references the file descriptor
 	name := fmt.caprintf("/wl_zoo_%v", cast(uintptr)zooWindow.display) // randomish name
-	zooWindow.fd = posix.shm_open(name, {.RDWR, .CREAT, .EXCL}, {.IRUSR, .IWUSR})
-	if zooWindow.fd == -1 {
+	fd := posix.shm_open(name, {.RDWR, .CREAT, .EXCL}, {.IRUSR, .IWUSR})
+	if fd == -1 {
 		fmt.println("Error: could not create shared memory: ", posix.strerror(posix.errno()))
 		return
 	}
 	posix.shm_unlink(name)
-	res := posix.ftruncate(zooWindow.fd, auto_cast size)
+	res := posix.ftruncate(fd, auto_cast size)
 	if res == .FAIL {
 		fmt.println("Error: could not resize shared memory: ", posix.strerror(posix.errno()))
+		posix.close(fd)
 		return
 	}
 	raw_data, err := linux.mmap(
@@ -121,19 +119,18 @@ create_shm_pool :: proc() {
 		uint(size),
 		{.READ, .WRITE},
 		{.SHARED},
-		auto_cast zooWindow.fd,
+		auto_cast fd,
 		0,
 	)
-	// since raw_data is a rawptr to the start of the shared memory,
-	// we can cast it to a slice of u32 maintaining the ^ operator, ie `[^]u32`
-	// this gives us an unmanaged slice as it was allocated by mmap and not by Odin
 	zooWindow.data = cast([^]u32)raw_data
 	if err != .NONE {
 		fmt.println("Error: could not mmap: ", err)
+		posix.close(fd)
 		return
 	}
 
-	zooWindow.pool = wl.shm_create_pool(zooWindow.shm, auto_cast zooWindow.fd, size)
+	zooWindow.pool = wl.shm_create_pool(zooWindow.shm, auto_cast fd, size)
+	posix.close(fd)
 }
 
 sync_geometry :: proc() {
@@ -258,14 +255,13 @@ main :: proc() {
 	zooWindow.surface = wl.compositor_create_surface(zooWindow.compositor)
 
 	xdg.wm_base_add_listener(zooWindow.wm_base, &wm_base_listener, nil)
-	zooWindow.xdg_surface = xdg.wm_base_get_xdg_surface(zooWindow.wm_base, zooWindow.surface)
-	xdg.surface_add_listener(zooWindow.xdg_surface, &surface_listener, nil)
-
+	xdg_surface := xdg.wm_base_get_xdg_surface(zooWindow.wm_base, zooWindow.surface)
+	xdg.surface_add_listener(xdg_surface, &surface_listener, nil)
 
 	// --- Setup Toplevel ---
-	zooWindow.toplevel = xdg.surface_get_toplevel(zooWindow.xdg_surface)
-	xdg.toplevel_set_title(zooWindow.toplevel, "Zoomdin")
-	xdg.toplevel_add_listener(zooWindow.toplevel, &toplevel_listener, nil)
+	toplevel := xdg.surface_get_toplevel(xdg_surface)
+	xdg.toplevel_set_title(toplevel, "Zoomdin")
+	xdg.toplevel_add_listener(toplevel, &toplevel_listener, nil)
 
 	wl.surface_commit(zooWindow.surface)
 	wl.display_roundtrip(zooWindow.display)
@@ -281,17 +277,8 @@ main :: proc() {
 	}
 
 	// --- Cleanup ---
-	if zooWindow.surface != nil {
-		wl.surface_destroy(zooWindow.surface)
-		zooWindow.surface = nil
-	}
-	if zooWindow.pool != nil {
-		wl.shm_pool_destroy(zooWindow.pool)
-		zooWindow.pool = nil
-	}
-	if zooWindow.fd != -1 {
-		posix.close(zooWindow.fd)
-	}
+	if zooWindow.surface != nil do wl.surface_destroy(zooWindow.surface)
+	if zooWindow.pool != nil do wl.shm_pool_destroy(zooWindow.pool)
 	wl.registry_destroy(registry)
 
 
