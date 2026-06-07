@@ -1,4 +1,4 @@
-package main
+package zoomdin
 
 import "base:runtime"
 import "core:fmt"
@@ -7,8 +7,8 @@ import "core:sys/linux"
 import "core:sys/posix"
 import "core:time"
 
-import wl "vendor/wayland"
-import "vendor/wayland/xdg"
+import wl "pkg/wayland"
+import "pkg/wayland/xdg"
 
 global_context: runtime.Context
 
