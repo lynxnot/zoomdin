@@ -87,7 +87,7 @@ wm_base_listener := xdg.wm_base_listener {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// surface
+// buffer management
 create_shm_pool :: proc() {
 	context = global_context
 	width := 2560
@@ -177,6 +177,8 @@ draw_buffer :: proc() {
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// surface
 surface_configure :: proc "c" (data: rawptr, surface: ^xdg.surface, serial: uint) {
 	context = global_context
 	xdg.surface_ack_configure(surface, serial)
@@ -187,6 +189,8 @@ surface_listener := xdg.surface_listener {
 	configure = surface_configure,
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// toplevel
 toplevel_configure :: proc "c" (
 	data: rawptr,
 	toplevel: ^xdg.toplevel,
@@ -279,6 +283,4 @@ main :: proc() {
 	if zooWindow.surface != nil do wl.surface_destroy(zooWindow.surface)
 	if zooWindow.pool != nil do wl.shm_pool_destroy(zooWindow.pool)
 	wl.registry_destroy(registry)
-
-
 }
