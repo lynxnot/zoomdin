@@ -16,6 +16,8 @@ zooWindow: struct {
 	compositor: ^wl.compositor,
 	surface:    ^wl.surface,
 	seat:       ^wl.seat,
+	pointer:    ^wl.pointer,
+	keyboard:   ^wl.keyboard,
 	shm:        ^wl.shm,
 	wm_base:    ^xdg.wm_base,
 	data:       [^]u32,
@@ -24,7 +26,6 @@ zooWindow: struct {
 	curWidth:   int,
 	curHeight:  int,
 	quit:       bool,
-	outputs:    [dynamic]^wl.output,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,13 +60,7 @@ registry_global :: proc "c" (
 		)
 	case wl.seat_interface.name:
 		zooWindow.seat = cast(^wl.seat)wl.registry_bind(registry, name, &wl.seat_interface, 9)
-	case wl.output_interface.name:
-		append(
-			&zooWindow.outputs,
-			cast(^wl.output)wl.registry_bind(registry, name, &wl.output_interface, 4),
-		)
 	}
-
 }
 
 registry_global_remove :: proc "c" (data: rawptr, registry: ^wl.registry, name: uint) {
@@ -239,6 +234,206 @@ toplevel_listener := xdg.toplevel_listener {
 	wm_capabilities  = toplevel_wm_capabilities,
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+// seat
+seat_name :: proc "c" (data: rawptr, seat: ^wl.seat, name: cstring) {
+	context = global_context
+	fmt.println("seat name: ", name)
+}
+
+seat_capabilities :: proc "c" (data: rawptr, seat: ^wl.seat, capabilities: wl.seat_capability) {
+	context = global_context
+
+	have_pointer := cast(bool)(capabilities & wl.seat_capability.pointer)
+	have_keyboard := cast(bool)(capabilities & wl.seat_capability.keyboard)
+
+	if have_pointer && zooWindow.pointer == nil {
+		zooWindow.pointer = wl.seat_get_pointer(seat)
+		wl.pointer_add_listener(zooWindow.pointer, &pointer_listener, nil)
+	} else if !have_pointer && zooWindow.pointer != nil {
+		wl.pointer_release(zooWindow.pointer)
+		zooWindow.pointer = nil
+	}
+
+	if have_keyboard && zooWindow.keyboard == nil {
+		zooWindow.keyboard = wl.seat_get_keyboard(seat)
+		wl.keyboard_add_listener(zooWindow.keyboard, &kbd_listener, nil)
+	} else if !have_keyboard && zooWindow.keyboard != nil {
+		wl.keyboard_release(zooWindow.keyboard)
+		zooWindow.keyboard = nil
+	}
+}
+
+seat_listener := wl.seat_listener {
+	name         = seat_name,
+	capabilities = seat_capabilities,
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// pointer
+
+pointer_enter :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	serial: uint,
+	surface: ^wl.surface,
+	x: i32,
+	y: i32,
+) {
+}
+
+pointer_leave :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	serial: uint,
+	surface: ^wl.surface,
+) {
+}
+
+pointer_motion :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	time_: uint,
+	surface_x_: i32,
+	surface_y_: i32,
+) {
+}
+
+pointer_button :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	serial_: uint,
+	time_: uint,
+	button_: uint,
+	state_: wl.pointer_button_state,
+) {
+}
+
+pointer_axis :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	time_: uint,
+	axis_: wl.pointer_axis,
+	amount_: i32,
+) {
+}
+
+pointer_frame :: proc "c" (data: rawptr, pointer: ^wl.pointer) {
+}
+
+pointer_axis_source :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	axis_source: wl.pointer_axis_source,
+) {
+}
+
+pointer_axis_stop :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	time: uint,
+	axis: wl.pointer_axis,
+) {
+}
+
+pointer_axis_discrete :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	axis: wl.pointer_axis,
+	discrete: int,
+) {
+}
+
+pointer_axis_value120 :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	axis: wl.pointer_axis,
+	value120: int,
+) {
+}
+
+pointer_axis_relative_direction :: proc "c" (
+	data: rawptr,
+	pointer: ^wl.pointer,
+	axis: wl.pointer_axis,
+	direction: wl.pointer_axis_relative_direction,
+) {
+}
+
+pointer_listener := wl.pointer_listener {
+	enter                   = pointer_enter,
+	leave                   = pointer_leave,
+	motion                  = pointer_motion,
+	button                  = pointer_button,
+	axis                    = pointer_axis,
+	frame                   = pointer_frame,
+	axis_source             = pointer_axis_source,
+	axis_stop               = pointer_axis_stop,
+	axis_discrete           = pointer_axis_discrete,
+	axis_value120           = pointer_axis_value120,
+	axis_relative_direction = pointer_axis_relative_direction,
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// keyboard
+kbd_keymap :: proc "c" (
+	data: rawptr,
+	keyboard: ^wl.keyboard,
+	format_: wl.keyboard_keymap_format,
+	fd_: int,
+	size_: uint,
+) {
+}
+
+kbd_enter :: proc "c" (
+	data: rawptr,
+	keyboard: ^wl.keyboard,
+	serial: uint,
+	surface: ^wl.surface,
+	keys: wl.array,
+) {
+}
+
+kbd_leave :: proc "c" (data: rawptr, keyboard: ^wl.keyboard, serial: uint, surface: ^wl.surface) {
+}
+
+kbd_key :: proc "c" (
+	data: rawptr,
+	keyboard: ^wl.keyboard,
+	serial: uint,
+	time: uint,
+	key: uint,
+	state: wl.keyboard_key_state,
+) {
+}
+
+kbd_modifiers :: proc "c" (
+	data: rawptr,
+	keyboard: ^wl.keyboard,
+	serial: uint,
+	mods_depressed: uint,
+	mods_latched: uint,
+	mods_locked: uint,
+	group: uint,
+) {
+}
+
+kbd_repeat_info :: proc "c" (data: rawptr, keyboard: ^wl.keyboard, rate: int, delay: int) {
+}
+
+kbd_listener := wl.keyboard_listener {
+	keymap      = kbd_keymap,
+	enter       = kbd_enter,
+	leave       = kbd_leave,
+	key         = kbd_key,
+	modifiers   = kbd_modifiers,
+	repeat_info = kbd_repeat_info,
+}
+
+////////////////////////////////////////////////////////////////////////////////
 main :: proc() {
 	global_context = context
 
@@ -267,6 +462,10 @@ main :: proc() {
 	xdg.toplevel_add_listener(toplevel, &toplevel_listener, nil)
 
 	wl.surface_commit(zooWindow.surface)
+
+	// --- Seat Setup ---
+	wl.seat_add_listener(zooWindow.seat, &seat_listener, nil)
+
 	wl.display_roundtrip(zooWindow.display)
 
 	// --- Main Loop ---
